@@ -1,32 +1,51 @@
+require("dotenv").config();
+
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const { authmiddleware } = require("./middleware");
 
+const mongoose = require("mongoose");
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => {
+        console.log("MongoDB connected successfully");
+        console.log("Database:", mongoose.connection.db.databaseName);
+    })
+    .catch((err) => {
+        console.log("MongoDB connection failed", err);
+    });
+
+
 const app=express();
 app.use(express.json());
 
-let current_user_id=1;
-let current_todo_id=1;
+// let current_user_id=1;
+// let current_todo_id=1;
 
-const users=[];
-const todos=[];
+// const users=[];
+// const todos=[];
+const { userModel, todoModel } = require("./models");
 
 
 //Sign-Up endpoint
-app.post("/signup",(req,res) =>{
+app.post("/signup",async(req,res) =>{
     const username=req.body.username;
     const password=req.body.password;
-    const userExists=users.find(u=>u.username===username);
+    // const userExists=users.find(u=>u.username===username);
+    const userExists = await userModel.findOne({ username : username });
     if(userExists){
         return res.status(403).json({
             message: "Username is already taken..."
         });
     }
-    users.push({
-        id:current_user_id++,
+    // await userModel.create({
+    //     username: username,
+    //     password: password
+    // });
+    const newUser = await userModel.create({
         username:username,
-        password:password,
+        password:password
     });
+    console.log("NEW USER: ",newUser);
     res.json({
         message:"You have signed up successfully!!"
     });
@@ -34,10 +53,14 @@ app.post("/signup",(req,res) =>{
 
 
 //Sign-in Endpoint
-app.post("/signin",(req,res)=>{
+app.post("/signin",async(req,res)=>{
     const username=req.body.username;
     const password=req.body.password;
-    const userExists=users.find(u=>u.username===username && u.password===password);
+    // const userExists=users.find(u=>u.username===username && u.password===password);
+    const userExists = await userModel.findOne({
+        username:username,
+        password:password
+    });
     if(!userExists){
         return res.status(403).json({
             message:"Credentials do not match..."
@@ -45,7 +68,7 @@ app.post("/signin",(req,res)=>{
     };
     const token=jwt.sign(
         {
-            user_id:userExists.id,
+            user_id:userExists._id,
         },"secret123123"
     );
     res.json({
@@ -55,19 +78,17 @@ app.post("/signin",(req,res)=>{
 
 
 //post todo endpoint
-app.post("/todo",authmiddleware,(req,res)=>{
+app.post("/todo",authmiddleware,async(req,res)=>{
     const user_id=req.user_id;
     const title=req.body.title;
     const description=req.body.description;
 
-    todos.push(
-        {
-            id:current_todo_id++,
-            title:title,
-            description:description,
-            user_id:user_id
-        }
-    );
+    await todoModel.create({
+        title:title,
+        description:description,
+        user_id:user_id
+    });
+
     res.json({
         message:"todo activity added successfully",
     });
@@ -75,11 +96,11 @@ app.post("/todo",authmiddleware,(req,res)=>{
 
 
 //get todos endpoint
-app.get("/todos",authmiddleware,(req,res)=>{
+app.get("/todos",authmiddleware,async(req,res)=>{
     const user_id=req.user_id;
-    const user_todos=todos.filter(
-        t => t.user_id===user_id,
-    )
+    const user_todos = await todoModel.find({
+        user_id:user_id,
+    });
     res.json({
         todos:user_todos,
     });
