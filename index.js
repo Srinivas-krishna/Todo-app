@@ -4,25 +4,26 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const { authmiddleware } = require("./middleware");
 
-const mongoose = require("mongoose");
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => {
-        console.log("MongoDB connected successfully");
-        console.log("Database:", mongoose.connection.db.databaseName);
+const { Pool } = require("pg");
+const pool=new Pool({
+    connectionString: process.env.POSTGRES_URL,
+    ssl: {
+        rejectUnauthorized: false
+    }
+});
+pool.query("SELECT NOW()")
+    .then(result => {
+        console.log("PostgreSQL connected:", result.rows[0]);
     })
-    .catch((err) => {
-        console.log("MongoDB connection failed", err);
+    .catch(err => {
+        console.log("PostgreSQL connection failed:", err);
     });
 
 
 const app=express();
 app.use(express.json());
 
-// let current_user_id=1;
-// let current_todo_id=1;
 
-// const users=[];
-// const todos=[];
 const { userModel, todoModel } = require("./models");
 
 
@@ -30,22 +31,19 @@ const { userModel, todoModel } = require("./models");
 app.post("/signup",async(req,res) =>{
     const username=req.body.username;
     const password=req.body.password;
-    // const userExists=users.find(u=>u.username===username);
-    const userExists = await userModel.findOne({ username : username });
-    if(userExists){
+    const userExists=await pool.query(
+        "SELECT userid FROM users WHERE username= $1",
+        [username]
+    );
+    if (userExists.rows.length > 0){
         return res.status(403).json({
-            message: "Username is already taken..."
+            message:"username is already taken"
         });
     }
-    // await userModel.create({
-    //     username: username,
-    //     password: password
-    // });
-    const newUser = await userModel.create({
-        username:username,
-        password:password
-    });
-    console.log("NEW USER: ",newUser);
+    await pool.query(
+        "INSERT INTO users (username,password) VALUES ($1,$2)",
+        [username,password]
+    );
     res.json({
         message:"You have signed up successfully!!"
     });
@@ -56,19 +54,18 @@ app.post("/signup",async(req,res) =>{
 app.post("/signin",async(req,res)=>{
     const username=req.body.username;
     const password=req.body.password;
-    // const userExists=users.find(u=>u.username===username && u.password===password);
-    const userExists = await userModel.findOne({
-        username:username,
-        password:password
-    });
-    if(!userExists){
+    const userExists=await pool.query(
+        "SELECT userid FROM users WHERE username=$1 AND password=$2",
+        [username,password]
+    )
+    if(userExists.rows.length===0){
         return res.status(403).json({
             message:"Credentials do not match..."
         });
     };
     const token=jwt.sign(
         {
-            user_id:userExists._id,
+            user_id: userExists.rows[0].userid
         },"secret123123"
     );
     res.json({
@@ -83,11 +80,10 @@ app.post("/todo",authmiddleware,async(req,res)=>{
     const title=req.body.title;
     const description=req.body.description;
 
-    await todoModel.create({
-        title:title,
-        description:description,
-        user_id:user_id
-    });
+    await pool.query(
+        "INSERT INTO todos (userid,todoname,description,status) VALUES ($1,$2,$3,$4)",
+        [user_id,title,description,false]
+    );
 
     res.json({
         message:"todo activity added successfully",
@@ -98,11 +94,12 @@ app.post("/todo",authmiddleware,async(req,res)=>{
 //get todos endpoint
 app.get("/todos",authmiddleware,async(req,res)=>{
     const user_id=req.user_id;
-    const user_todos = await todoModel.find({
-        user_id:user_id,
-    });
+    const result = await pool.query(
+        "SELECT * FROM todos WHERE userid = $1",
+        [user_id]
+    )
     res.json({
-        todos:user_todos,
+        todos: result.rows
     });
 });
 
