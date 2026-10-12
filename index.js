@@ -3,7 +3,8 @@ require("dotenv").config();
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const { authmiddleware } = require("./middleware");
-
+const bcrypt=require("bcrypt");
+const { z, success }=require("zod");
 const { Pool } = require("pg");
 const pool=new Pool({
     connectionString: process.env.POSTGRES_URL,
@@ -18,7 +19,10 @@ pool.query("SELECT NOW()")
     .catch(err => {
         console.log("PostgreSQL connection failed:", err);
     });
-
+const signupSchema=z.object({
+    username:z.string().min(8).max(100),
+    password:z.string().min(8).max(100)
+})
 
 const app=express();
 app.use(express.json());
@@ -29,8 +33,16 @@ const { userModel, todoModel } = require("./models");
 
 //Sign-Up endpoint
 app.post("/signup",async(req,res) =>{
-    const username=req.body.username;
-    const password=req.body.password;
+    const result=signupSchema.safeParse(req.body);
+    if(!result.success){
+        return res.status(400).json({
+            message:"Invalid input",
+            errors: result.error.issues
+
+    })
+    }
+    const username=result.data.username;
+    const password=result.data.password;
     const userExists=await pool.query(
         "SELECT userid FROM users WHERE username= $1",
         [username]
@@ -40,9 +52,10 @@ app.post("/signup",async(req,res) =>{
             message:"username is already taken"
         });
     }
+    const hashedpassword=await bcrypt.hash(password,10);
     await pool.query(
         "INSERT INTO users (username,password) VALUES ($1,$2)",
-        [username,password]
+        [username,hashedpassword]
     );
     res.json({
         message:"You have signed up successfully!!"
@@ -55,14 +68,20 @@ app.post("/signin",async(req,res)=>{
     const username=req.body.username;
     const password=req.body.password;
     const userExists=await pool.query(
-        "SELECT userid FROM users WHERE username=$1 AND password=$2",
-        [username,password]
+        "SELECT userid FROM users WHERE username=$1",
+        [username]
     )
     if(userExists.rows.length===0){
         return res.status(403).json({
             message:"Credentials do not match..."
         });
     };
+    const passwordmatch=await bcrypt.compare(password,userExists.rows[0].password);
+    if(!passwordmatch){
+        return res.status(403).json({
+            message:"Credentials do not match..."
+        });
+    }
     const token=jwt.sign(
         {
             user_id: userExists.rows[0].userid
