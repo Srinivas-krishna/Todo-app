@@ -1,5 +1,5 @@
 require("dotenv").config();
-
+const cors= require("cors");
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const { authmiddleware } = require("./middleware");
@@ -25,6 +25,7 @@ const signupSchema=z.object({
 })
 
 const app=express();
+app.use(cors({origin:"http://localhost:5173"}));
 app.use(express.json());
 
 
@@ -43,6 +44,9 @@ app.post("/signup",async(req,res) =>{
     }
     const username=result.data.username;
     const password=result.data.password;
+    const allUsers = await pool.query("SELECT userid, username FROM users");
+    console.log("Users visible to backend:", allUsers.rows);
+    console.log("Username received:", JSON.stringify(username));
     const userExists=await pool.query(
         "SELECT userid FROM users WHERE username= $1",
         [username]
@@ -64,33 +68,85 @@ app.post("/signup",async(req,res) =>{
 
 
 //Sign-in Endpoint
-app.post("/signin",async(req,res)=>{
-    const username=req.body.username;
-    const password=req.body.password;
-    const userExists=await pool.query(
-        "SELECT userid FROM users WHERE username=$1",
+// app.post("/signin",async(req,res)=>{
+//     const username=req.body.username;
+//     const password=req.body.password;
+
+//     const userExists=await pool.query(
+//         "SELECT userid,password FROM users WHERE username=$1",
+//         [username]
+//     );
+//     console.log("Login username:", username);
+//     console.log("User found:", userExists.rows.length > 0);
+//     if(userExists.rows.length===0){
+//         return res.status(403).json({
+//             message:"Credentials do not match..."
+//         });
+//     };
+//     const passwordmatch=await bcrypt.compare(password,userExists.rows[0].password);
+//     console.log("Password matched:", passwordmatch);
+//     if(!passwordmatch){
+//         return res.status(403).json({
+//             message:"Credentials do not match..."
+//         });
+//     }
+//     const token=jwt.sign(
+//         {
+//             user_id: userExists.rows[0].userid
+//         },"secret123123"
+//     );
+//     res.json({
+//         token:token,
+//     });
+// });
+
+//new signin endpoint
+
+app.post("/signin", async (req, res) => {
+    const username = req.body.username.trim();
+    const password = req.body.password;
+
+    const userExists = await pool.query(
+        `SELECT userid, password
+         FROM users
+         WHERE BTRIM(username) = $1`,
         [username]
-    )
-    if(userExists.rows.length===0){
+    );
+
+    console.log("Username:", JSON.stringify(username));
+    console.log("User found:", userExists.rows.length > 0);
+
+    if (userExists.rows.length === 0) {
         return res.status(403).json({
-            message:"Credentials do not match..."
-        });
-    };
-    const passwordmatch=await bcrypt.compare(password,userExists.rows[0].password);
-    if(!passwordmatch){
-        return res.status(403).json({
-            message:"Credentials do not match..."
+            message: "Credentials do not match..."
         });
     }
-    const token=jwt.sign(
+
+    const passwordmatch = await bcrypt.compare(
+        password,
+        userExists.rows[0].password
+    );
+
+    console.log("Password matched:", passwordmatch);
+
+    if (!passwordmatch) {
+        return res.status(403).json({
+            message: "Credentials do not match..."
+        });
+    }
+
+    const token = jwt.sign(
         {
             user_id: userExists.rows[0].userid
-        },"secret123123"
+        },
+        "secret123123"
     );
+
     res.json({
-        token:token,
+        token: token
     });
 });
+
 
 
 //post todo endpoint
@@ -124,5 +180,5 @@ app.get("/todos",authmiddleware,async(req,res)=>{
 
 
 app.listen(3000,()=>{
-    console.log("server running on port 3000.....");
+    console.log("server running.");
 });
