@@ -179,6 +179,30 @@ app.get("/todos",authmiddleware,async(req,res)=>{
 });
 
 
+//update todos endpoint
+app.put("/todo/:id",authmiddleware,async(req,res) => {
+    const user_id = req.user_id;
+    const todo_id = req.params.id;
+    const { title, description, status } =  req.body;
+    const result = await pool.query(
+        `UPDATE todos 
+        SET todoname = $1, description = $2, status = $3
+        WHERE todoid = $4 AND userid = $5 
+        RETURNING *`,
+        [title, description, status, todo_id, user_id]
+    );
+    if(result.rows.length === 0){
+        return res.status(404).json({
+            messsage : "Todo not found",
+        });
+    }
+    res.json({
+        message:"Todo updated successfully!",
+        todo: result.rows[0]
+    });
+});
+
+
 app.listen(3000,()=>{
     console.log("server running.");
 });
