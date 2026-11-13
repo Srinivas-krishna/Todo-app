@@ -203,6 +203,26 @@ app.put("/todo/:id",authmiddleware,async(req,res) => {
 });
 
 
+//Delete Todo endpoint
+app.delete("/todo/:id",authmiddleware,async(req,res) =>{
+    const user_id = req.user_id;
+    const todo_id = req.params.id;
+
+    const result = await pool.query(
+        "DELETE FROM todos WHERE todoid = $1 AND userid = $2 RETURNING *",[todo_id,user_id]
+    );
+
+    if(result.rows.length === 0){
+        return res.status(404).json({
+            message : "Todo not found",
+        });
+    }
+    res.json({
+        message : "Todo Deleted succesfully!",
+    });
+});
+
+
 app.listen(3000,()=>{
     console.log("server running.");
 });

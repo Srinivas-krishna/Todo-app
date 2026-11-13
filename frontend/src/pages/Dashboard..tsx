@@ -65,6 +65,20 @@ function Dashboard(){
             alert("Failed to Update todo");
         }
     };
+
+    const handleDelete = async(todoId:number)=>{
+        const confirmed = window.confirm("Are you sure you want to delete this todo?");
+        if(!confirmed) return;
+
+        try{
+            const response = await API.delete(`/todo/${todoId}`);
+            alert(response.data.message);
+            fetchTodos();
+        }catch(error){
+            console.error(error);
+            alert("Failed to delete Todo!");
+        }
+    };
     return(
         <div>
             <h1>My Todo Dashboard</h1>
@@ -128,7 +142,11 @@ function Dashboard(){
                         <button onClick={() => handleEdit(todo)}>
                         Edit
                         </button>
+                        <button onClick = {() => handleDelete(todo.todoid)}>
+                            Delete
+                        </button>
                     </>
+
                     )}
                 </div>
                 ))
